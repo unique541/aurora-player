@@ -1,0 +1,24 @@
+# Aurora Player 依赖说明
+# ========================
+# 建议通过项目根目录执行：
+#   pip install -r requirements.txt
+#
+# 必需依赖：
+#   - uninstaller.py（GUI 卸载引导）仅用 Python 标准库 tkinter，无第三方依赖；
+#   - 打包 exe 需要 PyInstaller（仅打包机需要，运行时不需要）。
+#   - PySide6（GUI）
+#   - mutagen（读取音频文件内嵌歌词，如 MP3 的 USLT、FLAC/OGG/M4A 的 LYRICS/©lyr）
+PySide6>=6.5
+mutagen>=1.46
+
+# 以下为可选依赖，按后端启用：
+#   1. ffmpeg 后端（格式支持最全）需要：ffmpeg/ffprobe 可执行文件（非 pip 包，
+#      请到 https://ffmpeg.org/download.html 或使用包管理器安装，并加入 PATH），
+#      以及 sounddevice + numpy
+sounddevice>=0.4
+numpy>=1.24
+
+#   2. 无 ffmpeg 时的降级后端：pygame（支持 mp3/ogg/wav/mid 等基础格式）
+pygame>=2.5
+（内容由AI生成，仅供参考）
+（内容由AI生成，仅供参考）

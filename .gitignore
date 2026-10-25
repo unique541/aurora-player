@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# PyInstaller build output
+build/
+dist/
+*.pkg
+*.exe
+
+# Large local runtime dependency (download ffmpeg separately)
+build_res/ffmpeg.exe
+
+# Logs and scratch files
+*.log
+*_log.txt
+build_log.txt
+setup_build_log.txt
+uninstaller_build_log.txt
+temp/
+t2_out*.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
