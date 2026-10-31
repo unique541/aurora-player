@@ -89,6 +89,7 @@ import random
 import sys
 import html
 import json
+import hashlib
 
 from PySide6.QtCore import (Qt, QTimer, QUrl, QPropertyAnimation, QEasingCurve,
                             QEvent, QFile, QPoint, QParallelAnimationGroup)
@@ -105,11 +106,23 @@ from PySide6.QtWidgets import (
 # 避免拖慢启动；player_core 的 numpy/sounddevice/QtMultimedia 也已是惰性加载。
 import player_core
 from player_core import (create_engine, PLAYABLE_EXTENSIONS,
-                         VIDEO_EXTENSIONS, AUDIO_EXTENSIONS)
+                         VIDEO_EXTENSIONS, AUDIO_EXTENSIONS,
+                         CRYPTO_AUDIO_EXTENSIONS)
 import themes
+
+# 专属加密音频解锁模块（ncm/qmc0-qmc3/qmcflac/qmcogg/kgm/kgma/kgg/kwm；
+# mflac/mgg 为 QMCv2，解密模块明确不支持，仅在导入时给出中文提示）
+import unlock_formats
 
 MODES = ("顺序播放", "单曲循环", "随机播放")
 PLAYLIST_FILE_NAME = "playlist.json"
+
+# QMCv2（mflac/mgg）解密模块明确不支持，导入时跳过并提示，不加入播放列表
+UNSUPPORTED_CRYPTO_EXTENSIONS = {".mflac", ".mgg"}
+
+# 专属加密音频解锁后的缓存目录（解密结果按内容哈希命名，交给引擎播放）
+UNLOCK_CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "temp", "unlock_cache")
 
 
 def _playlist_path():
@@ -1029,6 +1042,7 @@ class PlayerWindow(QMainWindow):
         self._render_lyric_placeholder()
         self._set_play_icon(False)
         self._current_is_video = False
+        self._playing_unlocked = False
 
     def _set_play_icon(self, playing):
         self.play_btn.setText("⏸" if playing else "▶")
@@ -1060,7 +1074,9 @@ class PlayerWindow(QMainWindow):
             _os.path.expanduser("~"),
             "媒体文件 (*.mp3 *.flac *.wav *.ogg *.oga *.m4a *.aac *.opus "
             "*.wma *.ape *.aiff *.aif *.mp4 *.mkv *.avi *.mov *.webm *.flv "
-            "*.wmv *.m4v *.mpg *.mpeg);;所有文件 (*.*)")
+            "*.wmv *.m4v *.mpg *.mpeg "
+            "*.ncm *.qmc0 *.qmc2 *.qmc3 *.qmcflac *.qmcogg "
+            "*.kgm *.kgma *.kgg *.kwm);;所有文件 (*.*)")
         if not files:
             return
         added, indexes = self.import_files(files)
@@ -1096,11 +1112,17 @@ class PlayerWindow(QMainWindow):
         added = 0
         indexes = []
         changed = False
+        unsupported_hit = False
         for p in paths:
             p = os.path.normpath(p)
             if not os.path.isfile(p):
                 continue
-            if os.path.splitext(p)[1].lower() not in PLAYABLE_EXTENSIONS:
+            ext = os.path.splitext(p)[1].lower()
+            if ext in UNSUPPORTED_CRYPTO_EXTENSIONS:
+                # mflac/mgg（QMCv2）解密模块不支持：跳过并记录，末尾统一提示
+                unsupported_hit = True
+                continue
+            if ext not in PLAYABLE_EXTENSIONS:
                 continue
             if p in existing:
                 indexes.append(self.songs.index(p))
@@ -1110,13 +1132,21 @@ class PlayerWindow(QMainWindow):
             indexes.append(len(self.songs) - 1)
             added += 1
             changed = True
+            display = os.path.basename(p)
+            if ext in CRYPTO_AUDIO_EXTENSIONS:
+                # 加密音频在列表中显示原标题（去掉 .ncm/.kgm 等专属后缀）
+                display = os.path.splitext(display)[0]
             item = QListWidgetItem(
-                "%d. %s" % (len(self.songs), os.path.basename(p)))
+                "%d. %s" % (len(self.songs), display))
             item.setToolTip(p)
             self.song_list.addItem(item)
         self._update_stats()
         if changed:
             self._save_playlist()
+        if unsupported_hit:
+            self.statusBar().showMessage(
+                "已跳过 mflac/mgg（QMCv2 暂不支持解密，请用官方客户端或 "
+                "unlock-music 先解锁后再导入）", 8000)
         return added, indexes
 
     # ------------------------------------------------------------- 拖拽
@@ -1279,6 +1309,9 @@ class PlayerWindow(QMainWindow):
         self.song_list.setCurrentRow(idx)
 
         name = _os.path.basename(path)
+        if ext in CRYPTO_AUDIO_EXTENSIONS:
+            # 加密音频显示原标题（去掉 .ncm/.kgm 等专属后缀）
+            name = os.path.splitext(name)[0]
         self.track_label.setText(name)
         self.track_label.setToolTip(path)
 
@@ -1312,7 +1345,18 @@ class PlayerWindow(QMainWindow):
             self.backend_name = self.audio_engine.backend_name
             self._current_is_video = False
             self._switch_to_lyric_page()
-            self.engine.open_file(path)
+            # 专属加密音频：先解密到 unlock_cache，再用解锁后的真实音频播放
+            play_path = path
+            self._playing_unlocked = False
+            if ext in CRYPTO_AUDIO_EXTENSIONS:
+                play_path = self._unlock_audio(path)
+                if play_path is None:
+                    # 解密失败：提示已展示，复位播放状态避免卡在无效曲目
+                    self._set_play_icon(False)
+                    self._idle_state()
+                    return
+                self._playing_unlocked = True
+            self.engine.open_file(play_path)
             self.engine.set_volume(self.vol_slider.value() / 100.0)
             self._load_lyrics(path)
             self._paused_pos_ms = 0
@@ -1331,6 +1375,39 @@ class PlayerWindow(QMainWindow):
 
     def _switch_to_video_page(self):
         self.right_stack.setCurrentWidget(self.video_page)
+
+    def _unlock_audio(self, src_path):
+        """解密专属加密音频并写入 temp\\unlock_cache\\（按内容哈希命名）。
+
+        成功返回解锁后的真实音频绝对路径；失败时展示中文提示并返回 None。
+        """
+        try:
+            dec, fmt = unlock_formats.decrypt_crypto_audio(src_path)
+        except unlock_formats.QmcV2Unsupported as e:
+            self.statusBar().showMessage("无法解锁：%s" % e, 8000)
+            return None
+        except unlock_formats.DecryptError as e:
+            self.statusBar().showMessage("无法解锁：%s" % e, 8000)
+            return None
+        except Exception as e:
+            self._append_error_log("解锁加密音频失败: %s" % (e,))
+            self.statusBar().showMessage(
+                "无法解锁该加密音频（发生未知错误，详见日志）", 8000)
+            return None
+        try:
+            os.makedirs(UNLOCK_CACHE_DIR, exist_ok=True)
+            digest = hashlib.md5(dec).hexdigest()
+            cache_path = os.path.join(UNLOCK_CACHE_DIR,
+                                      "%s.%s" % (digest, fmt))
+            if not os.path.isfile(cache_path):
+                with open(cache_path, "wb") as f:
+                    f.write(dec)
+            return cache_path
+        except Exception as e:
+            self._append_error_log("写入解锁缓存失败: %s" % (e,))
+            self.statusBar().showMessage(
+                "无法写入解锁缓存目录（%s）" % UNLOCK_CACHE_DIR, 8000)
+            return None
 
     def _switch_to_lyric_page(self):
         self.right_stack.setCurrentWidget(self.lyric_page)
@@ -1467,6 +1544,12 @@ class PlayerWindow(QMainWindow):
         if self._current_is_video:
             self.statusBar().showMessage(
                 "无法播放该视频（格式不受支持或文件损坏）", 6000)
+            return
+        # 专属加密音频解锁后的文件播放失败：不降级
+        # （降级会把加密原文件直接交给后备引擎，必然解码失败，只会浪费等待）
+        if getattr(self, "_playing_unlocked", False):
+            self.statusBar().showMessage(
+                "无法播放该音频（解码失败或文件损坏）", 6000)
             return
         # 声道/采样率等播放异常：ffmpeg 后端自动降级到 pygame / QtMultimedia 重播
         if (self.backend_name.startswith("ffmpeg") and path

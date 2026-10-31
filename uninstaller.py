@@ -30,7 +30,15 @@ APP_DIR_NAME = "AuroraPlayer"
 EXE_NAME = "AuroraPlayer.exe"
 PROG_ID = "AuroraPlayer.Audio"
 VIDEO_PROG_ID = "AuroraPlayer.Video"
-AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac", ".opus")
+# 与 installer.py 保持一致：常规音频 + 加密音频
+# （player_core.AUDIO_EXTENSIONS ∪ CRYPTO_AUDIO_EXTENSIONS）
+AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".oga", ".m4a", ".aac",
+              ".mp4", ".wma", ".ape", ".opus", ".aiff", ".aif", ".aifc",
+              ".mp2", ".mp1", ".amr", ".mka", ".ac3", ".dts", ".wv",
+              ".tta", ".caf", ".mid", ".midi", ".mod", ".s3m", ".xm",
+              ".it", ".mpc", ".m4b", ".webm",
+              ".ncm", ".qmc0", ".qmc2", ".qmc3", ".qmcflac", ".qmcogg",
+              ".kgm", ".kgma", ".kgg", ".kwm")
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv",
               ".wmv", ".m4v", ".mpg", ".mpeg", ".ts", ".3gp", ".ogv")
 SHORTCUT_NAME = "Aurora Player.lnk"

@@ -35,10 +35,18 @@ EXE_NAME = "AuroraPlayer.exe"
 UNINSTALLER_EXE = "uninstaller.exe"
 APP_DIR_NAME = "AuroraPlayer"
 START_MENU_GROUP = "AuroraPlayer"
-# 文件关联：ProgID 与常见音频/视频扩展名（HKCU 用户级，免管理员权限）
+# 文件关联：ProgID 与音频/视频扩展名（HKCU 用户级，免管理员权限）
+# AUDIO_EXTS 与 player_core.py 的 AUDIO_EXTENSIONS ∪ CRYPTO_AUDIO_EXTENSIONS 保持一致
 PROG_ID = "AuroraPlayer.Audio"
 VIDEO_PROG_ID = "AuroraPlayer.Video"
-AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac", ".opus")
+# 常规音频（player_core.AUDIO_EXTENSIONS，含 .mp4/.webm 等音视频容器）+ 加密音频
+AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".oga", ".m4a", ".aac",
+              ".mp4", ".wma", ".ape", ".opus", ".aiff", ".aif", ".aifc",
+              ".mp2", ".mp1", ".amr", ".mka", ".ac3", ".dts", ".wv",
+              ".tta", ".caf", ".mid", ".midi", ".mod", ".s3m", ".xm",
+              ".it", ".mpc", ".m4b", ".webm",
+              ".ncm", ".qmc0", ".qmc2", ".qmc3", ".qmcflac", ".qmcogg",
+              ".kgm", ".kgma", ".kgg", ".kwm")
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv",
               ".wmv", ".m4v", ".mpg", ".mpeg")
 SHORTCUT_NAME = "Aurora Player.lnk"
@@ -359,8 +367,9 @@ def do_install(update, done, fail, register_assoc):
         assoc_note = ""
         if register_assoc:
             if reg_assoc:
-                assoc_note = ("已将常见音频与视频文件关联到本播放器\n"
-                              "（音频：mp3/flac/wav/ogg/m4a/aac/opus；\n"
+                assoc_note = ("已将全部可播放音频与视频文件关联到本播放器\n"
+                              "（音频：mp3/flac/wav/ogg/m4a/aac/opus/wma/\n"
+                              "       ape/aiff 及加密 ncm/qmc/kgm/kwm 等；\n"
                               " 视频：mp4/mkv/avi/mov/webm/flv 等），\n"
                               "双击媒体文件即可播放。\n")
             else:
@@ -420,9 +429,10 @@ class InstallerUI:
         self.assoc_var = tk.BooleanVar(value=True)
         self.assoc_chk = tk.Checkbutton(
             self.root,
-            text="设为常见音频/视频文件的默认播放器\n"
-                 "（音频：mp3/flac/wav/ogg/m4a/aac/opus\n"
-                 " 视频：mp4/mkv/avi/mov/webm/flv）",
+            text="设为全部可播放音频/视频文件的默认播放器\n"
+                 "（音频：mp3/flac/wav/ogg/m4a/aac/opus/ape/wma 等\n"
+                 "       及加密音频 ncm/qmc/kgm/kwm 等）\n"
+                 "（视频：mp4/mkv/avi/mov/webm/flv 等）",
             variable=self.assoc_var, bg="#f4f6fb", fg="#2d3748",
             activebackground="#f4f6fb", activeforeground="#2d3748",
             font=("Microsoft YaHei UI", 9), anchor="w", justify="left")

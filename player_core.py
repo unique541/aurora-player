@@ -86,8 +86,16 @@ VIDEO_EXTENSIONS = {
     ".wmv", ".m4v", ".mpg", ".mpeg", ".ts", ".3gp", ".ogv",
 }
 
-# 可导入播放列表的完整媒体扩展名 = 音频 + 视频
-PLAYABLE_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
+# 音乐软件专属加密音频扩展名（导入后由 unlock_formats 自动解密播放；
+# 注意：mflac/mgg 属于 QMCv2，解密模块明确不支持，故不纳入可导入列表）
+CRYPTO_AUDIO_EXTENSIONS = {
+    ".ncm", ".qmc0", ".qmc2", ".qmc3", ".qmcflac", ".qmcogg",
+    ".kgm", ".kgma", ".kgg", ".kwm",
+}
+
+# 可导入播放列表的完整媒体扩展名 = 音频 + 视频 + 专属加密音频
+PLAYABLE_EXTENSIONS = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS \
+    | CRYPTO_AUDIO_EXTENSIONS
 
 # pygame 后端实际支持的基础格式
 _PYGAME_EXTS = {".mp3", ".ogg", ".oga", ".wav", ".mid", ".midi",
